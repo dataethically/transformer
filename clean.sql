@@ -17,7 +17,7 @@ SELECT
     (jsonb_extract_path_text(raw_json, 'timezone'))::INTEGER,
     (jsonb_extract_path_text(raw_json, 'id'))::INTEGER
 FROM 
-    raw_data_table
+    raw_weather_data
 WHERE 
     NOT EXISTS (
         SELECT 1 FROM locations 
@@ -40,7 +40,7 @@ SELECT
     jsonb_extract_path_text(weather_element, 'icon')
 FROM (
     SELECT jsonb_array_elements(raw_json->'weather') AS weather_element
-    FROM raw_data_table
+    FROM raw_weather_data
 ) AS weather_data
 ON CONFLICT (condition_id) DO UPDATE SET
     main_category = EXCLUDED.main_category,
@@ -68,7 +68,7 @@ SELECT
     (jsonb_extract_path_text(raw_json, 'main', 'sea_level'))::INTEGER,
     (jsonb_extract_path_text(raw_json, 'main', 'grnd_level'))::INTEGER
 FROM
-    raw_data_table
+    raw_weather_data
 RETURNING main_id;
 
 -- Insert wind metrics
@@ -82,7 +82,7 @@ SELECT
     (jsonb_extract_path_text(raw_json, 'wind', 'deg'))::INTEGER,
     (jsonb_extract_path_text(raw_json, 'wind', 'gust'))::DECIMAL
 FROM
-    raw_data_table
+    raw_weather_data
 RETURNING wind_id;
 
 -- Finally insert the weather data linking everything
@@ -91,7 +91,7 @@ WITH location_data AS (
         location_id, 
         jsonb_extract_path_text(raw_json, 'id') AS openweather_id
     FROM 
-        locations, raw_data_table
+        locations, raw_weather_data
     WHERE 
         openweather_id = (jsonb_extract_path_text(raw_json, 'id'))::INTEGER
 ),
@@ -101,7 +101,7 @@ condition_data AS (
         jsonb_extract_path_text(weather_element, 'id') AS condition_openweather_id
     FROM 
         weather_conditions,
-        (SELECT jsonb_array_elements(raw_json->'weather') AS weather_element FROM raw_data_table) AS weather_data
+        (SELECT jsonb_array_elements(raw_json->'weather') AS weather_element FROM raw_data_data) AS weather_data
     WHERE 
         condition_id = (jsonb_extract_path_text(weather_element, 'id'))::INTEGER
 ),
@@ -145,7 +145,7 @@ SELECT
     to_timestamp((jsonb_extract_path_text(raw_json, 'sys', 'sunrise'))::BIGINT),
     to_timestamp((jsonb_extract_path_text(raw_json, 'sys', 'sunset'))::BIGINT)
 FROM
-    raw_data_table,
+    raw_weather_data,
     location_data l,
     condition_data c,
     main_data m,
@@ -153,7 +153,7 @@ FROM
 ON CONFLICT (location_id, observation_time) DO NOTHING;
 
 -- Clean up the raw data (uncomment when you're sure the above works)
--- DELETE FROM raw_data_table;
+-- DELETE FROM raw_weather_data;
 
 
 COMMIT;
