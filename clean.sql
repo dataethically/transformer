@@ -26,18 +26,18 @@ WHERE
 ON CONFLICT (openweather_id) DO NOTHING;
 
 -- Insert weather conditions if they don't exist
--- Extract first weather condition from the weather array (index 0)
+-- Fix: Use DISTINCT ON to ensure each condition_id is only processed once
 INSERT INTO weather_conditions (
     condition_id,
     main_category,
     description,
     icon
 )
-SELECT
-    (json_extract_path_text(weather_element, 'id'))::INTEGER,
-    json_extract_path_text(weather_element, 'main'),
-    json_extract_path_text(weather_element, 'description'),
-    json_extract_path_text(weather_element, 'icon')
+SELECT DISTINCT ON (condition_id)
+    (json_extract_path_text(weather_element, 'id'))::INTEGER AS condition_id,
+    json_extract_path_text(weather_element, 'main') AS main_category,
+    json_extract_path_text(weather_element, 'description') AS description,
+    json_extract_path_text(weather_element, 'icon') AS icon
 FROM (
     SELECT json_array_elements(raw_json->'weather') AS weather_element
     FROM raw_weather_data
@@ -65,8 +65,8 @@ SELECT
     (json_extract_path_text(raw_json, 'main', 'temp_max'))::DECIMAL,
     (json_extract_path_text(raw_json, 'main', 'pressure'))::INTEGER,
     (json_extract_path_text(raw_json, 'main', 'humidity'))::INTEGER,
-    (json_extract_path_text(raw_json, 'main', 'sea_level'))::INTEGER,
-    (json_extract_path_text(raw_json, 'main', 'grnd_level'))::INTEGER
+    NULLIF(json_extract_path_text(raw_json, 'main', 'sea_level'), '')::INTEGER,
+    NULLIF(json_extract_path_text(raw_json, 'main', 'grnd_level'), '')::INTEGER
 FROM
     raw_weather_data
 RETURNING main_id;
@@ -80,7 +80,7 @@ INSERT INTO wind_metrics (
 SELECT
     (json_extract_path_text(raw_json, 'wind', 'speed'))::DECIMAL,
     (json_extract_path_text(raw_json, 'wind', 'deg'))::INTEGER,
-    (json_extract_path_text(raw_json, 'wind', 'gust'))::DECIMAL
+    NULLIF(json_extract_path_text(raw_json, 'wind', 'gust'), '')::DECIMAL
 FROM
     raw_weather_data
 RETURNING wind_id;
@@ -96,7 +96,7 @@ WITH location_data AS (
         openweather_id = (json_extract_path_text(raw_json, 'id'))::INTEGER
 ),
 condition_data AS (
-    SELECT 
+    SELECT DISTINCT ON (condition_id)
         condition_id,
         json_extract_path_text(weather_element, 'id') AS condition_openweather_id
     FROM 
@@ -154,6 +154,5 @@ ON CONFLICT (location_id, observation_time) DO NOTHING;
 
 -- Clean up the raw data (uncomment when you're sure the above works)
 -- DELETE FROM raw_weather_data;
-
 
 COMMIT;
